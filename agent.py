@@ -14,10 +14,7 @@ from tools import (
     suggest_followup
 )
 
-# ---------------------
-# LLM SETUP
-# ---------------------
-
+# LLM
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
     model="gpt-4o-mini",
@@ -37,32 +34,18 @@ llm = llm.bind_tools(tools)
 tool_node = ToolNode(tools)
 
 
-# ---------------------
-# STATE
-# ---------------------
-
 class AgentState(TypedDict):
     messages: List[BaseMessage]
 
 
-# ---------------------
-# LLM NODE
-# ---------------------
-
 def call_model(state: AgentState):
 
-    messages = state["messages"]
-
-    response = llm.invoke(messages)
+    response = llm.invoke(state["messages"])
 
     return {
-        "messages": messages + [response]
+        "messages": [response]
     }
 
-
-# ---------------------
-# ROUTING FUNCTION
-# ---------------------
 
 def route_tools(state: AgentState):
 
@@ -73,10 +56,6 @@ def route_tools(state: AgentState):
 
     return END
 
-
-# ---------------------
-# GRAPH
-# ---------------------
 
 workflow = StateGraph(AgentState)
 
@@ -99,14 +78,10 @@ workflow.add_edge("tools", "agent")
 graph = workflow.compile()
 
 
-# ---------------------
-# ENTRY FUNCTION
-# ---------------------
-
 def run_agent(message: str):
 
     system_prompt = f"""
-You are an AI CRM assistant for pharmaceutical field representatives.
+You are an AI CRM assistant for pharmaceutical representatives.
 
 Responsibilities:
 - Log interactions with healthcare professionals
@@ -115,23 +90,9 @@ Responsibilities:
 - Retrieve interaction history
 - Suggest follow-ups
 
-IMPORTANT RULES:
-
+IMPORTANT:
 If the user describes meeting or interacting with a doctor,
 you MUST call the log_interaction tool.
-
-Extract these fields if possible:
-- hcp_name
-- interaction_type
-- product
-- notes
-- date
-- follow_up
-
-If information is missing:
-- interaction_type = "meeting"
-- date = "today"
-- notes = summarize the message
 
 User message:
 {message}
