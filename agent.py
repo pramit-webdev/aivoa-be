@@ -1,9 +1,10 @@
-from typing import TypedDict, List
+from typing import TypedDict, List, Annotated
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
+from langgraph.graph.message import add_messages
 
 from config import OPENAI_API_KEY
 from tools import (
@@ -14,11 +15,7 @@ from tools import (
     suggest_followup
 )
 
-
-# -------------------------
 # LLM
-# -------------------------
-
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
     model="gpt-4o-mini",
@@ -38,31 +35,16 @@ llm = llm.bind_tools(tools)
 tool_node = ToolNode(tools)
 
 
-# -------------------------
-# Agent State
-# -------------------------
-
 class AgentState(TypedDict):
-    messages: List[BaseMessage]
+    messages: Annotated[List[BaseMessage], add_messages]
 
-
-# -------------------------
-# LLM Call
-# -------------------------
 
 def call_model(state: AgentState):
 
     response = llm.invoke(state["messages"])
 
-    # IMPORTANT: append messages instead of replacing
-    return {
-        "messages": state["messages"] + [response]
-    }
+    return {"messages": [response]}
 
-
-# -------------------------
-# Tool Routing
-# -------------------------
 
 def route_tools(state: AgentState):
 
@@ -73,10 +55,6 @@ def route_tools(state: AgentState):
 
     return END
 
-
-# -------------------------
-# LangGraph Workflow
-# -------------------------
 
 workflow = StateGraph(AgentState)
 
@@ -98,10 +76,6 @@ workflow.add_edge("tools", "agent")
 
 graph = workflow.compile()
 
-
-# -------------------------
-# Run Agent
-# -------------------------
 
 def run_agent(message: str):
 
