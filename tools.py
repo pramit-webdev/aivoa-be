@@ -5,17 +5,16 @@ from models import HCP, Interaction
 
 @tool
 def search_hcp(name: str):
+    """Search for a healthcare professional (HCP) in the database by name."""
 
     db = SessionLocal()
 
     hcp = db.query(HCP).filter(HCP.name.ilike(f"%{name}%")).first()
 
     if hcp:
-
         return f"HCP found: {hcp.name}, {hcp.specialization}, {hcp.hospital}"
 
     return "HCP not found"
-
 
 
 @tool
@@ -27,47 +26,36 @@ def log_interaction(
     date: str,
     follow_up: str
 ):
+    """Log a new interaction between a field representative and a healthcare professional."""
 
     db = SessionLocal()
 
     hcp = db.query(HCP).filter(HCP.name == hcp_name).first()
 
     if not hcp:
-
         hcp = HCP(name=hcp_name)
-
         db.add(hcp)
-
         db.commit()
-
         db.refresh(hcp)
 
     interaction = Interaction(
-
         hcp_id=hcp.id,
-
         interaction_type=interaction_type,
-
         product=product,
-
         notes=notes,
-
         date=date,
-
         follow_up=follow_up
-
     )
 
     db.add(interaction)
-
     db.commit()
 
     return "Interaction logged successfully"
 
 
-
 @tool
 def edit_interaction(interaction_id: int, field: str, value: str):
+    """Edit a field of an existing interaction record."""
 
     db = SessionLocal()
 
@@ -76,7 +64,6 @@ def edit_interaction(interaction_id: int, field: str, value: str):
     ).first()
 
     if not interaction:
-
         return "Interaction not found"
 
     setattr(interaction, field, value)
@@ -86,16 +73,15 @@ def edit_interaction(interaction_id: int, field: str, value: str):
     return "Interaction updated"
 
 
-
 @tool
 def interaction_history(hcp_name: str):
+    """Retrieve past interactions for a given healthcare professional."""
 
     db = SessionLocal()
 
     hcp = db.query(HCP).filter(HCP.name == hcp_name).first()
 
     if not hcp:
-
         return "No interactions found"
 
     interactions = db.query(Interaction).filter(
@@ -105,7 +91,6 @@ def interaction_history(hcp_name: str):
     result = []
 
     for i in interactions:
-
         result.append(
             f"{i.date}: {i.product} - {i.notes}"
         )
@@ -113,16 +98,14 @@ def interaction_history(hcp_name: str):
     return result
 
 
-
 @tool
 def suggest_followup(notes: str):
+    """Suggest a follow-up action based on the interaction notes."""
 
     if "research" in notes.lower():
-
         return "Send clinical trial documents"
 
     if "sample" in notes.lower():
-
         return "Provide drug samples"
 
     return "Schedule next visit"
