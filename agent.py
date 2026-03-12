@@ -1,5 +1,7 @@
 from langchain_openai import ChatOpenAI
-from langchain.agents import initialize_agent, AgentType
+from langchain_core.messages import HumanMessage
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolNode
 
 from config import OPENAI_API_KEY
 from tools import (
@@ -10,14 +12,13 @@ from tools import (
     suggest_followup
 )
 
-# Initialize GPT model
+# Initialize GPT
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
     model="gpt-4o-mini",
     temperature=0
 )
 
-# Register tools
 tools = [
     search_hcp,
     log_interaction,
@@ -26,50 +27,45 @@ tools = [
     suggest_followup
 ]
 
-# Create the agent
-agent = initialize_agent(
-    tools=tools,
-    llm=llm,
-    agent=AgentType.OPENAI_FUNCTIONS,
-    verbose=True
-)
+tool_node = ToolNode(tools)
+
+
+class AgentState(dict):
+    pass
+
+
+def call_llm(state):
+
+    message = state["message"]
+
+    prompt = f"""
+You are a CRM AI assistant for pharmaceutical representatives.
+
+User message:
+{message}
+
+Decide whether to call a tool or answer directly.
+"""
+
+    response = llm.invoke([HumanMessage(content=prompt)])
+
+    return {"response": response.content}
+
+
+workflow = StateGraph(AgentState)
+
+workflow.add_node("llm", call_llm)
+workflow.add_node("tools", tool_node)
+
+workflow.set_entry_point("llm")
+
+workflow.add_edge("llm", END)
+
+graph = workflow.compile()
 
 
 def run_agent(message: str):
 
-    try:
+    result = graph.invoke({"message": message})
 
-        prompt = f"""
-You are an AI CRM assistant for pharmaceutical field representatives.
-
-Your job is to record interactions with healthcare professionals.
-
-If the user describes a meeting with a doctor, you MUST log the interaction using the log_interaction tool.
-
-Extract these fields from the message if possible:
-- hcp_name
-- interaction_type
-- product
-- notes
-- date
-- follow_up
-
-If some fields are missing, make reasonable assumptions.
-
-User message:
-{message}
-"""
-
-        result = agent.invoke({"input": prompt})
-
-        if isinstance(result, dict):
-
-            if result.get("output"):
-                return result["output"]
-
-            return str(result)
-
-        return str(result)
-
-    except Exception as e:
-        return f"Agent error: {str(e)}"
+    return result.get("response", "")
