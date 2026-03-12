@@ -27,7 +27,7 @@ tools = [
     suggest_followup
 ]
 
-# Bind tools
+# Bind tools to LLM so it can call them
 llm_with_tools = llm.bind_tools(tools)
 
 tool_node = ToolNode(tools)
@@ -46,11 +46,11 @@ def call_llm(state):
     return {"messages": messages + [response]}
 
 
-def should_use_tool(state):
+def should_use_tools(state):
 
-    last_message = state["messages"][-1]
+    last = state["messages"][-1]
 
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+    if hasattr(last, "tool_calls") and last.tool_calls:
         return "tools"
 
     return END
@@ -65,7 +65,7 @@ workflow.set_entry_point("llm")
 
 workflow.add_conditional_edges(
     "llm",
-    should_use_tool,
+    should_use_tools,
     {
         "tools": "tools",
         END: END
@@ -83,10 +83,9 @@ def run_agent(message: str):
         "messages": [
             HumanMessage(
                 content=f"""
-You are an AI CRM assistant for pharmaceutical representatives.
+You are a CRM assistant for pharmaceutical representatives.
 
-If the user describes an interaction with a doctor,
-extract the information and use the log_interaction tool.
+If the user describes a doctor interaction, use the log_interaction tool.
 
 User message:
 {message}
