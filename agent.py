@@ -1,5 +1,7 @@
+from typing import TypedDict, List
+
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, BaseMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
@@ -12,7 +14,10 @@ from tools import (
     suggest_followup
 )
 
-# Initialize GPT
+# -----------------------------
+# LLM SETUP
+# -----------------------------
+
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
     model="gpt-4o-mini",
@@ -27,26 +32,41 @@ tools = [
     suggest_followup
 ]
 
-# Bind tools so LLM can call them
+# Bind tools to LLM
 llm_with_tools = llm.bind_tools(tools)
 
+# Tool execution node
 tool_node = ToolNode(tools)
 
 
-class AgentState(dict):
-    pass
+# -----------------------------
+# STATE DEFINITION
+# -----------------------------
+
+class AgentState(TypedDict):
+    messages: List[BaseMessage]
 
 
-def call_llm(state):
+# -----------------------------
+# LLM NODE
+# -----------------------------
 
-    messages = state["messages"]
+def call_llm(state: AgentState):
+
+    messages = state.get("messages", [])
 
     response = llm_with_tools.invoke(messages)
 
-    return {"messages": messages + [response]}
+    return {
+        "messages": messages + [response]
+    }
 
 
-def should_use_tools(state):
+# -----------------------------
+# ROUTING LOGIC
+# -----------------------------
+
+def should_use_tools(state: AgentState):
 
     last_message = state["messages"][-1]
 
@@ -55,6 +75,10 @@ def should_use_tools(state):
 
     return END
 
+
+# -----------------------------
+# GRAPH WORKFLOW
+# -----------------------------
 
 workflow = StateGraph(AgentState)
 
@@ -77,6 +101,10 @@ workflow.add_edge("tools", "llm")
 graph = workflow.compile()
 
 
+# -----------------------------
+# AGENT ENTRY FUNCTION
+# -----------------------------
+
 def run_agent(message: str):
 
     system_prompt = f"""
@@ -89,18 +117,34 @@ Responsibilities:
 - Retrieve interaction history
 - Suggest follow-up actions
 
-IMPORTANT:
+IMPORTANT RULES:
+
 If the user describes meeting or interacting with a doctor,
 you MUST call the log_interaction tool.
+
+Extract these fields if possible:
+- hcp_name
+- interaction_type
+- product
+- notes
+- date
+- follow_up
+
+If information is missing:
+- interaction_type = "meeting"
+- date = "today"
+- notes = summarize user message
 
 User message:
 {message}
 """
 
     result = graph.invoke({
-        "messages": [HumanMessage(content=system_prompt)]
+        "messages": [
+            HumanMessage(content=system_prompt)
+        ]
     })
 
-    last = result["messages"][-1]
+    last_message = result["messages"][-1]
 
-    return getattr(last, "content", "")
+    return getattr(last_message, "content", "")
