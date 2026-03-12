@@ -1,10 +1,9 @@
-from typing import TypedDict, List, Annotated
-import operator
+from typing import TypedDict, List
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt import ToolNode, tools_condition
 
 from config import OPENAI_API_KEY
 from tools import (
@@ -15,10 +14,7 @@ from tools import (
     suggest_followup
 )
 
-# -----------------------------
-# LLM SETUP
-# -----------------------------
-
+# LLM
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
     model="gpt-4o-mini",
@@ -33,114 +29,83 @@ tools = [
     suggest_followup
 ]
 
-# Bind tools to LLM
-llm_with_tools = llm.bind_tools(tools)
+llm = llm.bind_tools(tools)
 
-# Tool execution node
 tool_node = ToolNode(tools)
 
 
-# -----------------------------
-# STATE DEFINITION
-# Use Annotated with operator.add so LangGraph appends messages
-# instead of replacing the entire list on each node return.
-# This is what keeps tool messages properly paired with their
-# preceding tool_calls messages — preventing the 400 error.
-# -----------------------------
+# ---------------------
+# STATE
+# ---------------------
 
 class AgentState(TypedDict):
-    messages: Annotated[List[BaseMessage], operator.add]
+    messages: List[BaseMessage]
 
 
-# -----------------------------
+# ---------------------
 # LLM NODE
-# -----------------------------
+# ---------------------
 
-def call_llm(state: AgentState):
-    messages = state["messages"]
-    response = llm_with_tools.invoke(messages)
-    # Return only the new message; operator.add will append it
+def call_model(state: AgentState):
+
+    response = llm.invoke(state["messages"])
+
     return {"messages": [response]}
 
 
-# -----------------------------
-# ROUTING LOGIC
-# -----------------------------
-
-def should_use_tools(state: AgentState):
-    last_message = state["messages"][-1]
-
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
-
-    return END
-
-
-# -----------------------------
-# GRAPH WORKFLOW
-# -----------------------------
+# ---------------------
+# GRAPH
+# ---------------------
 
 workflow = StateGraph(AgentState)
 
-workflow.add_node("llm", call_llm)
+workflow.add_node("agent", call_model)
 workflow.add_node("tools", tool_node)
 
-workflow.set_entry_point("llm")
+workflow.set_entry_point("agent")
 
 workflow.add_conditional_edges(
-    "llm",
-    should_use_tools,
+    "agent",
+    tools_condition,
     {
         "tools": "tools",
         END: END
     }
 )
 
-workflow.add_edge("tools", "llm")
+workflow.add_edge("tools", "agent")
 
 graph = workflow.compile()
 
 
-# -----------------------------
-# AGENT ENTRY FUNCTION
-# -----------------------------
+# ---------------------
+# ENTRY FUNCTION
+# ---------------------
 
-SYSTEM_PROMPT = """You are an AI CRM assistant for pharmaceutical field representatives.
+def run_agent(message: str):
+
+    system_prompt = f"""
+You are an AI CRM assistant for pharmaceutical representatives.
 
 Responsibilities:
 - Log interactions with healthcare professionals
 - Search HCP records
 - Edit interactions
 - Retrieve interaction history
-- Suggest follow-up actions
+- Suggest follow-ups
 
-IMPORTANT RULES:
-
+IMPORTANT:
 If the user describes meeting or interacting with a doctor,
 you MUST call the log_interaction tool.
 
-Extract these fields if possible:
-- hcp_name
-- interaction_type
-- product
-- notes
-- date
-- follow_up
-
-If information is missing:
-- interaction_type = "meeting"
-- date = "today"
-- notes = summarize user message
+User message:
+{message}
 """
 
-def run_agent(message: str):
     result = graph.invoke({
         "messages": [
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessage(content=message)
+            HumanMessage(content=system_prompt)
         ]
     })
 
-    last_message = result["messages"][-1]
-
-    return getattr(last_message, "content", "")
+    return result["messages"][-1].content
