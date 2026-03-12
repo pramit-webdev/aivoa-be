@@ -1,7 +1,7 @@
 from typing import TypedDict, List
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
@@ -14,7 +14,11 @@ from tools import (
     suggest_followup
 )
 
+
+# -------------------------
 # LLM
+# -------------------------
+
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
     model="gpt-4o-mini",
@@ -34,18 +38,31 @@ llm = llm.bind_tools(tools)
 tool_node = ToolNode(tools)
 
 
+# -------------------------
+# Agent State
+# -------------------------
+
 class AgentState(TypedDict):
     messages: List[BaseMessage]
 
+
+# -------------------------
+# LLM Call
+# -------------------------
 
 def call_model(state: AgentState):
 
     response = llm.invoke(state["messages"])
 
+    # IMPORTANT: append messages instead of replacing
     return {
-        "messages": [response]
+        "messages": state["messages"] + [response]
     }
 
+
+# -------------------------
+# Tool Routing
+# -------------------------
 
 def route_tools(state: AgentState):
 
@@ -56,6 +73,10 @@ def route_tools(state: AgentState):
 
     return END
 
+
+# -------------------------
+# LangGraph Workflow
+# -------------------------
 
 workflow = StateGraph(AgentState)
 
@@ -78,9 +99,13 @@ workflow.add_edge("tools", "agent")
 graph = workflow.compile()
 
 
+# -------------------------
+# Run Agent
+# -------------------------
+
 def run_agent(message: str):
 
-    system_prompt = f"""
+    system_prompt = """
 You are an AI CRM assistant for pharmaceutical representatives.
 
 Responsibilities:
@@ -93,14 +118,12 @@ Responsibilities:
 IMPORTANT:
 If the user describes meeting or interacting with a doctor,
 you MUST call the log_interaction tool.
-
-User message:
-{message}
 """
 
     result = graph.invoke({
         "messages": [
-            HumanMessage(content=system_prompt)
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=message)
         ]
     })
 
