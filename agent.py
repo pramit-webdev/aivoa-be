@@ -3,7 +3,7 @@ from typing import TypedDict, List
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.prebuilt import ToolNode
 
 from config import OPENAI_API_KEY
 from tools import (
@@ -14,7 +14,10 @@ from tools import (
     suggest_followup
 )
 
-# LLM
+# ---------------------
+# LLM SETUP
+# ---------------------
+
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
     model="gpt-4o-mini",
@@ -48,9 +51,27 @@ class AgentState(TypedDict):
 
 def call_model(state: AgentState):
 
-    response = llm.invoke(state["messages"])
+    messages = state["messages"]
 
-    return {"messages": [response]}
+    response = llm.invoke(messages)
+
+    return {
+        "messages": messages + [response]
+    }
+
+
+# ---------------------
+# ROUTING FUNCTION
+# ---------------------
+
+def route_tools(state: AgentState):
+
+    last_message = state["messages"][-1]
+
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        return "tools"
+
+    return END
 
 
 # ---------------------
@@ -66,7 +87,7 @@ workflow.set_entry_point("agent")
 
 workflow.add_conditional_edges(
     "agent",
-    tools_condition,
+    route_tools,
     {
         "tools": "tools",
         END: END
@@ -85,7 +106,7 @@ graph = workflow.compile()
 def run_agent(message: str):
 
     system_prompt = f"""
-You are an AI CRM assistant for pharmaceutical representatives.
+You are an AI CRM assistant for pharmaceutical field representatives.
 
 Responsibilities:
 - Log interactions with healthcare professionals
@@ -94,9 +115,23 @@ Responsibilities:
 - Retrieve interaction history
 - Suggest follow-ups
 
-IMPORTANT:
+IMPORTANT RULES:
+
 If the user describes meeting or interacting with a doctor,
 you MUST call the log_interaction tool.
+
+Extract these fields if possible:
+- hcp_name
+- interaction_type
+- product
+- notes
+- date
+- follow_up
+
+If information is missing:
+- interaction_type = "meeting"
+- date = "today"
+- notes = summarize the message
 
 User message:
 {message}
