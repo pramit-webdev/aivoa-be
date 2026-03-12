@@ -27,7 +27,7 @@ tools = [
     suggest_followup
 ]
 
-# Bind tools to LLM so it can call them
+# Bind tools so LLM can call them
 llm_with_tools = llm.bind_tools(tools)
 
 tool_node = ToolNode(tools)
@@ -48,9 +48,9 @@ def call_llm(state):
 
 def should_use_tools(state):
 
-    last = state["messages"][-1]
+    last_message = state["messages"][-1]
 
-    if hasattr(last, "tool_calls") and last.tool_calls:
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "tools"
 
     return END
@@ -79,19 +79,26 @@ graph = workflow.compile()
 
 def run_agent(message: str):
 
-    result = graph.invoke({
-        "messages": [
-            HumanMessage(
-                content=f"""
-You are a CRM assistant for pharmaceutical representatives.
+    system_prompt = f"""
+You are an AI CRM assistant for pharmaceutical field representatives.
 
-If the user describes a doctor interaction, use the log_interaction tool.
+Responsibilities:
+- Log interactions with healthcare professionals
+- Search HCP records
+- Edit interactions
+- Retrieve interaction history
+- Suggest follow-up actions
+
+IMPORTANT:
+If the user describes meeting or interacting with a doctor,
+you MUST call the log_interaction tool.
 
 User message:
 {message}
 """
-            )
-        ]
+
+    result = graph.invoke({
+        "messages": [HumanMessage(content=system_prompt)]
     })
 
     last = result["messages"][-1]
