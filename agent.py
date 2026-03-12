@@ -38,18 +38,22 @@ def run_agent(message: str):
 
     try:
 
-        # Provide system guidance for the agent
         prompt = f"""
 You are an AI CRM assistant for pharmaceutical field representatives.
 
-Your responsibilities:
-- Log interactions with Healthcare Professionals (HCPs)
-- Search HCP details
-- Edit interaction records
-- Retrieve interaction history
-- Suggest follow-up actions
+Your job is to record interactions with healthcare professionals.
 
-Use the available tools whenever required.
+If the user describes a meeting with a doctor, you MUST log the interaction using the log_interaction tool.
+
+Extract these fields from the message if possible:
+- hcp_name
+- interaction_type
+- product
+- notes
+- date
+- follow_up
+
+If some fields are missing, make reasonable assumptions.
 
 User message:
 {message}
@@ -57,11 +61,13 @@ User message:
 
         result = agent.invoke({"input": prompt})
 
-        # If the agent returned a proper output
-        if isinstance(result, dict) and "output" in result and result["output"]:
-            return result["output"]
+        if isinstance(result, dict):
 
-        # If output missing, return raw result for debugging
+            if result.get("output"):
+                return result["output"]
+
+            return str(result)
+
         return str(result)
 
     except Exception as e:
