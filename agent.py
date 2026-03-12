@@ -1,7 +1,7 @@
-from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 from langchain.agents import initialize_agent, AgentType
 
-from config import GROQ_API_KEY
+from config import OPENAI_API_KEY
 from tools import (
     search_hcp,
     log_interaction,
@@ -10,10 +10,11 @@ from tools import (
     suggest_followup
 )
 
-# Initialize LLM
-llm = ChatGroq(
-    groq_api_key=GROQ_API_KEY,
-    model="llama-3.1-8b-instant"
+# Initialize GPT model
+llm = ChatOpenAI(
+    api_key=OPENAI_API_KEY,
+    model="gpt-4o-mini",
+    temperature=0
 )
 
 # Register tools
