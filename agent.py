@@ -10,41 +10,37 @@ from tools import (
     suggest_followup
 )
 
+# Initialize LLM
 llm = ChatGroq(
-
     groq_api_key=GROQ_API_KEY,
-
     model="gemma2-9b-it"
-
 )
 
+# Register tools
 tools = [
-
     search_hcp,
-
     log_interaction,
-
     edit_interaction,
-
     interaction_history,
-
     suggest_followup
-
 ]
 
+# Create agent
 agent = initialize_agent(
-
-    tools,
-
-    llm,
-
+    tools=tools,
+    llm=llm,
     agent=AgentType.OPENAI_FUNCTIONS,
-
     verbose=True
-
 )
 
 
 def run_agent(message: str):
 
-    return agent.run(message)
+    try:
+        result = agent.invoke({"input": message})
+
+        # Ensure response is serializable
+        return result["output"]
+
+    except Exception as e:
+        return f"Agent error: {str(e)}"
