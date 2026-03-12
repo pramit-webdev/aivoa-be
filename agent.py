@@ -25,7 +25,7 @@ tools = [
     suggest_followup
 ]
 
-# Create agent
+# Create the agent
 agent = initialize_agent(
     tools=tools,
     llm=llm,
@@ -37,10 +37,32 @@ agent = initialize_agent(
 def run_agent(message: str):
 
     try:
-        result = agent.invoke({"input": message})
 
-        # Ensure response is serializable
-        return result["output"]
+        # Provide system guidance for the agent
+        prompt = f"""
+You are an AI CRM assistant for pharmaceutical field representatives.
+
+Your responsibilities:
+- Log interactions with Healthcare Professionals (HCPs)
+- Search HCP details
+- Edit interaction records
+- Retrieve interaction history
+- Suggest follow-up actions
+
+Use the available tools whenever required.
+
+User message:
+{message}
+"""
+
+        result = agent.invoke({"input": prompt})
+
+        # If the agent returned a proper output
+        if isinstance(result, dict) and "output" in result and result["output"]:
+            return result["output"]
+
+        # If output missing, return raw result for debugging
+        return str(result)
 
     except Exception as e:
         return f"Agent error: {str(e)}"
