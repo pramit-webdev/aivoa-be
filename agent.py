@@ -1,7 +1,8 @@
-from typing import TypedDict, List
+from typing import TypedDict, List, Annotated
+import operator
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, BaseMessage
+from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
@@ -41,10 +42,14 @@ tool_node = ToolNode(tools)
 
 # -----------------------------
 # STATE DEFINITION
+# Use Annotated with operator.add so LangGraph appends messages
+# instead of replacing the entire list on each node return.
+# This is what keeps tool messages properly paired with their
+# preceding tool_calls messages — preventing the 400 error.
 # -----------------------------
 
 class AgentState(TypedDict):
-    messages: List[BaseMessage]
+    messages: Annotated[List[BaseMessage], operator.add]
 
 
 # -----------------------------
@@ -52,14 +57,10 @@ class AgentState(TypedDict):
 # -----------------------------
 
 def call_llm(state: AgentState):
-
-    messages = state.get("messages", [])
-
+    messages = state["messages"]
     response = llm_with_tools.invoke(messages)
-
-    return {
-        "messages": messages + [response]
-    }
+    # Return only the new message; operator.add will append it
+    return {"messages": [response]}
 
 
 # -----------------------------
@@ -67,7 +68,6 @@ def call_llm(state: AgentState):
 # -----------------------------
 
 def should_use_tools(state: AgentState):
-
     last_message = state["messages"][-1]
 
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
@@ -105,10 +105,7 @@ graph = workflow.compile()
 # AGENT ENTRY FUNCTION
 # -----------------------------
 
-def run_agent(message: str):
-
-    system_prompt = f"""
-You are an AI CRM assistant for pharmaceutical field representatives.
+SYSTEM_PROMPT = """You are an AI CRM assistant for pharmaceutical field representatives.
 
 Responsibilities:
 - Log interactions with healthcare professionals
@@ -134,14 +131,13 @@ If information is missing:
 - interaction_type = "meeting"
 - date = "today"
 - notes = summarize user message
-
-User message:
-{message}
 """
 
+def run_agent(message: str):
     result = graph.invoke({
         "messages": [
-            HumanMessage(content=system_prompt)
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(content=message)
         ]
     })
 
