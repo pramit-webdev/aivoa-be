@@ -13,7 +13,7 @@ from tools import (
 # Initialize LLM
 llm = ChatGroq(
     groq_api_key=GROQ_API_KEY,
-    model="gemma2-9b-it"
+    model="llama3-70b-8192"
 )
 
 # Register tools
